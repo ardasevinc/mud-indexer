@@ -1,5 +1,81 @@
 # @latticexyz/dev-tools
 
+## 2.0.0-next.14
+
+### Minor Changes
+
+- 1faf7f69: Added Zustand support to Dev Tools:
+
+  ```ts
+  const { syncToZustand } from "@latticexyz/store-sync";
+  const { mount as mountDevTools } from "@latticexyz/dev-tools";
+
+  const { useStore } = syncToZustand({ ... });
+
+  mountDevTools({
+    ...
+    useStore,
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [aacffcb5]
+- Updated dependencies [1faf7f69]
+- Updated dependencies [b2d2aa71]
+- Updated dependencies [bb91edaa]
+- Updated dependencies [1327ea8c]
+- Updated dependencies [bb91edaa]
+  - @latticexyz/common@2.0.0-next.14
+  - @latticexyz/store-sync@2.0.0-next.14
+  - @latticexyz/store@2.0.0-next.14
+  - @latticexyz/world@2.0.0-next.14
+  - @latticexyz/schema-type@2.0.0-next.14
+  - @latticexyz/react@2.0.0-next.14
+  - @latticexyz/recs@2.0.0-next.14
+  - @latticexyz/utils@2.0.0-next.14
+
+## 2.0.0-next.13
+
+### Patch Changes
+
+- Updated dependencies [52182f70]
+- Updated dependencies [de47d698]
+- Updated dependencies [f6d214e3]
+- Updated dependencies [fa776358]
+- Updated dependencies [3e057061]
+- Updated dependencies [b1d41727]
+  - @latticexyz/utils@2.0.0-next.13
+  - @latticexyz/store-sync@2.0.0-next.13
+  - @latticexyz/common@2.0.0-next.13
+  - @latticexyz/recs@2.0.0-next.13
+  - @latticexyz/store@2.0.0-next.13
+  - @latticexyz/world@2.0.0-next.13
+  - @latticexyz/react@2.0.0-next.13
+
+## 2.0.0-next.12
+
+### Patch Changes
+
+- d2f8e940: Moved to new resource ID utils.
+- Updated dependencies [7ce82b6f]
+- Updated dependencies [7fa2ca18]
+- Updated dependencies [6ca1874e]
+- Updated dependencies [06605615]
+- Updated dependencies [f62c767e]
+- Updated dependencies [f62c767e]
+- Updated dependencies [d2f8e940]
+- Updated dependencies [25086be5]
+- Updated dependencies [29c3f508]
+- Updated dependencies [d2f8e940]
+  - @latticexyz/store@2.0.0-next.12
+  - @latticexyz/world@2.0.0-next.12
+  - @latticexyz/common@2.0.0-next.12
+  - @latticexyz/store-sync@2.0.0-next.12
+  - @latticexyz/react@2.0.0-next.12
+  - @latticexyz/recs@2.0.0-next.12
+  - @latticexyz/utils@2.0.0-next.12
+
 ## 2.0.0-next.11
 
 ### Patch Changes

@@ -1,3 +1,487 @@
+## Version 2.0.0-next.14
+
+Release date: Fri Nov 10 2023
+
+### Major changes
+
+**[feat(dev-tools): show zustand tables (#1891)](https://github.com/latticexyz/mud/commit/1faf7f697481a92c02ca40edbf71e317de1c06e3)** (@latticexyz/store-sync)
+
+`syncToZustand` now uses `tables` argument to populate the Zustand store's `tables` key, rather than the on-chain table registration events. This means we'll no longer store data into Zustand you haven't opted into receiving (e.g. other namespaces).
+
+**[feat(store-indexer): separate postgres indexer/frontend services (#1887)](https://github.com/latticexyz/mud/commit/5ecccfe751b0d217f98a45e8e7fdc73d15ad6494)** (@latticexyz/store-indexer)
+
+Separated frontend server and indexer service for Postgres indexer. Now you can run the Postgres indexer with one writer and many readers.
+
+If you were previously using the `postgres-indexer` binary, you'll now need to run both `postgres-indexer` and `postgres-frontend`.
+
+For consistency, the Postgres database logs are now disabled by default. If you were using these, please let us know so we can add them back in with an environment variable flag.
+
+### Minor changes
+
+**[feat(cli): warn when contract is over or close to the size limit (#1894)](https://github.com/latticexyz/mud/commit/bdb46fe3aa124014a53f1f070eb0db25771ace19)** (@latticexyz/cli)
+
+Deploys now validate contract size before deploying and warns when a contract is over or close to the size limit (24kb). This should help identify the most common cause of "evm revert" errors during system and module contract deploys.
+
+**[fix(store): resolveUserTypes for static arrays (#1876)](https://github.com/latticexyz/mud/commit/bb91edaa01c8a66fc3eef4d5c93ccd20ae9a5066)** (@latticexyz/schema-type)
+
+Added `isSchemaAbiType` helper function to check and narrow an unknown string to the `SchemaAbiType` type
+
+**[feat(dev-tools): show zustand tables (#1891)](https://github.com/latticexyz/mud/commit/1faf7f697481a92c02ca40edbf71e317de1c06e3)** (@latticexyz/dev-tools, create-mud)
+
+Added Zustand support to Dev Tools:
+
+```ts
+const { syncToZustand } from "@latticexyz/store-sync";
+const { mount as mountDevTools } from "@latticexyz/dev-tools";
+
+const { useStore } = syncToZustand({ ... });
+
+mountDevTools({
+  ...
+  useStore,
+});
+```
+
+**[docs: add changeset for SystemboundDelegationControl (#1906)](https://github.com/latticexyz/mud/commit/fdbba6d88563034be607600a7af25b234f306103)** (@latticexyz/world-modules)
+
+Added a new delegation control called `SystemboundDelegationControl` that delegates control of a specific system for some maximum number of calls. It is almost identical to `CallboundDelegationControl` except the delegatee can call the system with any function and args.
+
+**[feat(store-indexer): add env var to index only one store (#1886)](https://github.com/latticexyz/mud/commit/f318f2fe736767230442f074fffd2d39c5629b38)** (@latticexyz/store-indexer)
+
+Added `STORE_ADDRESS` environment variable to index only a specific MUD Store.
+
+### Patch changes
+
+**[fix(create-mud): pin prettier-plugin-solidity (#1889)](https://github.com/latticexyz/mud/commit/aacffcb59ad75826b33a437ce430ac0e8bfe0ddb)** (@latticexyz/common, create-mud)
+
+Pinned prettier-plugin-solidity version to 1.1.3
+
+**[fix(cli): add worldAddress to dev-contracts (#1892)](https://github.com/latticexyz/mud/commit/1feecf4955462554c650f56e4777aa330e31f667)** (@latticexyz/cli)
+
+Added `--worldAddress` argument to `dev-contracts` CLI command so that you can develop against an existing world.
+
+**[fix(store,world): explicit mud.config exports (#1900)](https://github.com/latticexyz/mud/commit/b2d2aa715b30cdbcddf8e442c663bd319235c209)** (@latticexyz/store, @latticexyz/world)
+
+Added an explicit package export for `mud.config`
+
+**[fix(store-sync): show TS error for non-existent tables when using zustand (#1896)](https://github.com/latticexyz/mud/commit/1327ea8c88f99fd268c743966dabed6122be098d)** (@latticexyz/store-sync)
+
+Fixed `syncToZustand` types so that non-existent tables give an error and `never` type instead of a generic `Table` type.
+
+**[fix(store): resolveUserTypes for static arrays (#1876)](https://github.com/latticexyz/mud/commit/bb91edaa01c8a66fc3eef4d5c93ccd20ae9a5066)** (@latticexyz/store)
+
+Fixed `resolveUserTypes` for static arrays.
+`resolveUserTypes` is used by `deploy`, which prevented deploying tables with static arrays.
+
+**[docs(faucet): fix default port in readme (#1835)](https://github.com/latticexyz/mud/commit/9ad27046c5fbc814cb7d9339097eed96a922c083)** (@latticexyz/cli)
+
+The `mud test` cli now exits with code 1 on test failure. It used to exit with code 0, which meant that CIs didn't notice test failures.
+
+---
+
+## Version 2.0.0-next.13
+
+Release date: Thu Nov 02 2023
+
+### Major changes
+
+**[feat(utils): remove hash utils and ethers (#1783)](https://github.com/latticexyz/mud/commit/52182f70d350bb99cdfa6054cd6d181e58a91aa6)** (@latticexyz/utils)
+
+Removed `keccak256` and `keccak256Coord` hash utils in favor of [viem's `keccak256`](https://viem.sh/docs/utilities/keccak256.html#keccak256).
+
+```diff
+- import { keccak256 } from "@latticexyz/utils";
++ import { keccak256, toHex } from "viem";
+
+- const hash = keccak256("some string");
++ const hash = keccak256(toHex("some string"));
+```
+
+```diff
+- import { keccak256Coord } from "@latticexyz/utils";
++ import { encodeAbiParameters, keccak256, parseAbiParameters } from "viem";
+
+  const coord = { x: 1, y: 1 };
+- const hash = keccak256Coord(coord);
++ const hash = keccak256(encodeAbiParameters(parseAbiParameters("int32, int32"), [coord.x, coord.y]));
+```
+
+**[feat(store-indexer,store-sync): filter by table and key (#1794)](https://github.com/latticexyz/mud/commit/f6d214e3d79f9591fddd3687aa987a57f417256c)** (@latticexyz/store-indexer)
+
+Removed `tableIds` filter option in favor of the more flexible `filters` option that accepts `tableId` and an optional `key0` and/or `key1` to filter data by tables and keys.
+
+If you were using an indexer client directly, you'll need to update your query:
+
+```diff
+  await indexer.findAll.query({
+    chainId,
+    address,
+-   tableIds: ['0x...'],
++   filters: [{ tableId: '0x...' }],
+  });
+```
+
+**[feat(create-mud): move react template to zustand, add react-ecs template (#1851)](https://github.com/latticexyz/mud/commit/78949f2c939ff5f743c026367c5978cb459f6f88)** (create-mud)
+
+Replaced the `react` template with a basic task list app using the new Zustand storage adapter and sync method. This new template better demonstrates the different ways of building with MUD and has fewer concepts to learn (i.e. just tables and records, no more ECS).
+
+For ECS-based React apps, you can use `react-ecs` template for the previous RECS storage adapter.
+
+### Minor changes
+
+**[feat(create-mud): replace concurrently with mprocs (#1862)](https://github.com/latticexyz/mud/commit/6288f9033b5f26124ab0ae3cde5934a7aef50f95)** (create-mud)
+
+Updated templates to use [mprocs](https://github.com/pvolok/mprocs) instead of [concurrently](https://github.com/open-cli-tools/concurrently) for running dev scripts.
+
+**[feat(store-sync): extra table definitions (#1840)](https://github.com/latticexyz/mud/commit/de47d698f031a28ef8d9e329e3cffc85e904c6a1)** (@latticexyz/store-sync)
+
+Added an optional `tables` option to `syncToRecs` to allow you to sync from tables that may not be expressed by your MUD config. This will be useful for namespaced tables used by [ERC20](https://github.com/latticexyz/mud/pull/1789) and [ERC721](https://github.com/latticexyz/mud/pull/1844) token modules until the MUD config gains [namespace support](https://github.com/latticexyz/mud/issues/994).
+
+Here's how we use this in our example project with the `KeysWithValue` module:
+
+```ts
+syncToRecs({
+  ...
+  tables: {
+    KeysWithValue: {
+      namespace: "keywval",
+      name: "Inventory",
+      tableId: resourceToHex({ type: "table", namespace: "keywval", name: "Inventory" }),
+      keySchema: {
+        valueHash: { type: "bytes32" },
+      },
+      valueSchema: {
+        keysWithValue: { type: "bytes32[]" },
+      },
+    },
+  },
+  ...
+});
+```
+
+**[feat(world-modules): add ERC721 module (#1844)](https://github.com/latticexyz/mud/commit/d7325e517ce18597d55e8bce41036e78e00c3a78)** (@latticexyz/world-modules)
+
+Added the `ERC721Module` to `@latticexyz/world-modules`.
+This module allows the registration of `ERC721` tokens in an existing World.
+
+Important note: this module has not been audited yet, so any production use is discouraged for now.
+
+````solidity
+import { PuppetModule } from "@latticexyz/world-modules/src/modules/puppet/PuppetModule.sol";
+import { ERC721MetadataData } from "@latticexyz/world-modules/src/modules/erc721-puppet/tables/ERC721Metadata.sol";
+import { IERC721Mintable } from "@latticexyz/world-modules/src/modules/erc721-puppet/IERC721Mintable.sol";
+import { registerERC721 } from "@latticexyz/world-modules/src/modules/erc721-puppet/registerERC721.sol";
+
+// The ERC721 module requires the Puppet module to be installed first
+world.installModule(new PuppetModule(), new bytes(0));
+
+// After the Puppet module is installed, new ERC721 tokens can be registered
+IERC721Mintable token = registerERC721(world, "myERC721", ERC721MetadataData({ name: "Token", symbol: "TKN", baseURI: "" }));```
+````
+
+**[feat(world-modules): add puppet module (#1793)](https://github.com/latticexyz/mud/commit/35348f831b923aed6e9bdf8b38bf337f3e944a48)** (@latticexyz/world-modules)
+
+Added the `PuppetModule` to `@latticexyz/world-modules`. The puppet pattern allows an external contract to be registered as an external interface for a MUD system.
+This allows standards like `ERC20` (that require a specific interface and events to be emitted by a unique contract) to be implemented inside a MUD World.
+
+The puppet serves as a proxy, forwarding all calls to the implementation system (also called the "puppet master").
+The "puppet master" system can emit events from the puppet contract.
+
+```solidity
+import { PuppetModule } from "@latticexyz/world-modules/src/modules/puppet/PuppetModule.sol";
+import { createPuppet } from "@latticexyz/world-modules/src/modules/puppet/createPuppet.sol";
+
+// Install the puppet module
+world.installModule(new PuppetModule(), new bytes(0));
+
+// Register a new puppet for any system
+// The system must implement the `CustomInterface`,
+// and the caller must own the system's namespace
+CustomInterface puppet = CustomInterface(createPuppet(world, <systemId>));
+```
+
+**[feat(create-mud): enable MUD CLI debug logs (#1861)](https://github.com/latticexyz/mud/commit/b68e1699b52714561c9ac62fa593d0b6cd9fe656)** (create-mud)
+
+Enabled MUD CLI debug logs for all templates.
+
+**[feat(store-indexer,store-sync): filter by table and key (#1794)](https://github.com/latticexyz/mud/commit/f6d214e3d79f9591fddd3687aa987a57f417256c)** (@latticexyz/store-sync)
+
+Added a `filters` option to store sync to allow filtering client data on tables and keys. Previously, it was only possible to filter on `tableIds`, but the new filter option allows for more flexible filtering by key.
+
+If you are building a large MUD application, you can use positional keys as a way to shard data and make it possible to load only the data needed in the client for a particular section of your app. We're using this already in Sky Strife to load match-specific data into match pages without having to load data for all matches, greatly improving load time and client performance.
+
+```ts
+syncToRecs({
+  ...
+  filters: [{ tableId: '0x...', key0: '0x...' }],
+});
+```
+
+The `tableIds` option is now deprecated and will be removed in the future, but is kept here for backwards compatibility.
+
+**[feat(world-modules): add ERC20 module (#1789)](https://github.com/latticexyz/mud/commit/83638373450af5d8f703a183a74107ef7efb4152)** (@latticexyz/world-modules)
+
+Added the `ERC20Module` to `@latticexyz/world-modules`.
+This module allows the registration of `ERC20` tokens in an existing World.
+
+Important note: this module has not been audited yet, so any production use is discouraged for now.
+
+```solidity
+import { PuppetModule } from "@latticexyz/world-modules/src/modules/puppet/PuppetModule.sol";
+import { IERC20Mintable } from "@latticexyz/world-modules/src/modules/erc20-puppet/IERC20Mintable.sol";
+import { registerERC20 } from "@latticexyz/world-modules/src/modules/erc20-puppet/registerERC20.sol";
+
+// The ERC20 module requires the Puppet module to be installed first
+world.installModule(new PuppetModule(), new bytes(0));
+
+// After the Puppet module is installed, new ERC20 tokens can be registered
+IERC20Mintable token = registerERC20(world, "myERC20", ERC20MetadataData({ decimals: 18, name: "Token", symbol: "TKN" }));
+```
+
+**[feat(store-sync): sync to zustand (#1843)](https://github.com/latticexyz/mud/commit/fa77635839e760a9de5fc8959ee492b7a4d8a7cd)** (@latticexyz/store-sync)
+
+Added a Zustand storage adapter and corresponding `syncToZustand` method for use in vanilla and React apps. It's used much like the other sync methods, except it returns a bound store and set of typed tables.
+
+```ts
+import { syncToZustand } from "@latticexyz/store-sync/zustand";
+import config from "contracts/mud.config";
+
+const { tables, useStore, latestBlock$, storedBlockLogs$, waitForTransaction } = await syncToZustand({
+  config,
+  ...
+});
+
+// in vanilla apps
+const positions = useStore.getState().getRecords(tables.Position);
+
+// in React apps
+const positions = useStore((state) => state.getRecords(tables.Position));
+```
+
+This change will be shortly followed by an update to our templates that uses Zustand as the default client data store and sync method.
+
+**[feat(store): add experimental config resolve helper (#1826)](https://github.com/latticexyz/mud/commit/b1d41727d4b1964ad3cd907c1c2126b02172b413)** (@latticexyz/common)
+
+Added a `mapObject` helper to map the value of each property of an object to a new value.
+
+### Patch changes
+
+**[fix(create-mud): set store address in PostDeploy script (#1817)](https://github.com/latticexyz/mud/commit/c5148da763645e0adc1250245ea447904014bef2)** (create-mud)
+
+Updated templates' PostDeploy script to set store address so that tables can be used directly inside PostDeploy.
+
+**[fix(create-mud): workaround create-create-app templating (#1863)](https://github.com/latticexyz/mud/commit/1b33a915c56247599c19c5de04090b776b87d561)** (create-mud)
+
+Fixed an issue when creating a new project from the `react` app, where React's expressions were overlapping with Handlebars expressions (used by our template command).
+
+**[fix(cli): change import order so .env file is loaded first (#1860)](https://github.com/latticexyz/mud/commit/21a626ae9bd79f1a275edc70b43d19ed43f48131)** (@latticexyz/cli)
+
+Changed `mud` CLI import order so that environment variables from the `.env` file are loaded before other imports.
+
+**[fix(common,config): remove chalk usage (#1824)](https://github.com/latticexyz/mud/commit/3e057061da17dd2d0c5fd23e6f5a027bdf9a9223)** (@latticexyz/common, @latticexyz/config)
+
+Removed chalk usage from modules imported in client fix downstream client builds (vite in particular).
+
+---
+
+## Version 2.0.0-next.12
+
+Release date: Fri Oct 20 2023
+
+### Major changes
+
+**[feat(store): default off storeArgument (#1741)](https://github.com/latticexyz/mud/commit/7ce82b6fc6bbf390ae159fe990d5d4fca5a4b0cb)** (@latticexyz/cli, @latticexyz/store, @latticexyz/world-modules, @latticexyz/world, create-mud)
+
+Store config now defaults `storeArgument: false` for all tables. This means that table libraries, by default, will no longer include the extra functions with the `_store` argument. This default was changed to clear up the confusion around using table libraries in tests, `PostDeploy` scripts, etc.
+
+If you are sure you need to manually specify a store when interacting with tables, you can still manually toggle it back on with `storeArgument: true` in the table settings of your MUD config.
+
+If you want to use table libraries in `PostDeploy.s.sol`, you can add the following lines:
+
+```diff
+  import { Script } from "forge-std/Script.sol";
+  import { console } from "forge-std/console.sol";
+  import { IWorld } from "../src/codegen/world/IWorld.sol";
++ import { StoreSwitch } from "@latticexyz/store/src/StoreSwitch.sol";
+
+  contract PostDeploy is Script {
+    function run(address worldAddress) external {
++     StoreSwitch.setStoreAddress(worldAddress);
++
++     SomeTable.get(someKey);
+```
+
+**[feat(cli): declarative deployment (#1702)](https://github.com/latticexyz/mud/commit/29c3f5087017dbc9dc2c9160e10bfbac5806741f)** (@latticexyz/cli)
+
+`deploy`, `test`, `dev-contracts` were overhauled using a declarative deployment approach under the hood. Deploys are now idempotent and re-running them will introspect the world and figure out the minimal changes necessary to bring the world into alignment with its config: adding tables, adding/upgrading systems, changing access control, etc.
+
+The following CLI arguments are now removed from these commands:
+
+- `--debug` (you can now adjust CLI output with `DEBUG` environment variable, e.g. `DEBUG=mud:*`)
+- `--priorityFeeMultiplier` (now calculated automatically)
+- `--disableTxWait` (everything is now parallelized with smarter nonce management)
+- `--pollInterval` (we now lean on viem defaults and we don't wait/poll until the very end of the deploy)
+
+Most deployment-in-progress logs are now behind a [debug](https://github.com/debug-js/debug) flag, which you can enable with a `DEBUG=mud:*` environment variable.
+
+**[feat(world-modules): only install modules once (#1756)](https://github.com/latticexyz/mud/commit/6ca1874e02161c8feb08b5fafb20b57ce0c8fe72)** (@latticexyz/world-modules)
+
+Modules now revert with `Module_AlreadyInstalled` if attempting to install more than once with the same calldata.
+
+This is a temporary workaround for our deploy pipeline. We'll make these install steps more idempotent in the future.
+
+### Minor changes
+
+**[docs(world): add changeset for system call helpers (#1747)](https://github.com/latticexyz/mud/commit/7fa2ca1831234b54a55c20632d29877e5e711eb7)** (@latticexyz/world)
+
+Added TS helpers for calling systems dynamically via the World.
+
+- `encodeSystemCall` for `world.call`
+
+  ```ts
+  worldContract.write.call(encodeSystemCall({
+    abi: worldContract.abi,
+    systemId: resourceToHex({ ... }),
+    functionName: "registerDelegation",
+    args: [ ... ],
+  }));
+  ```
+
+- `encodeSystemCallFrom` for `world.callFrom`
+
+  ```ts
+  worldContract.write.callFrom(encodeSystemCallFrom({
+    abi: worldContract.abi,
+    from: "0x...",
+    systemId: resourceToHex({ ... }),
+    functionName: "registerDelegation",
+    args: [ ... ],
+  }));
+  ```
+
+- `encodeSystemCalls` for `world.batchCall`
+
+  ```ts
+  worldContract.write.batchCall(encodeSystemCalls(abi, [{
+    systemId: resourceToHex({ ... }),
+    functionName: "registerDelegation",
+    args: [ ... ],
+  }]));
+  ```
+
+- `encodeSystemCallsFrom` for `world.batchCallFrom`
+  ```ts
+  worldContract.write.batchCallFrom(encodeSystemCallsFrom(abi, "0x...", [{
+    systemId: resourceToHex({ ... }),
+    functionName: "registerDelegation",
+    args: [ ... ],
+  }]));
+  ```
+
+**[feat(world-modules): only install modules once (#1756)](https://github.com/latticexyz/mud/commit/6ca1874e02161c8feb08b5fafb20b57ce0c8fe72)** (@latticexyz/world)
+
+Added a `Module_AlreadyInstalled` error to `IModule`.
+
+**[feat(common): add sendTransaction, add mempool queue to nonce manager (#1717)](https://github.com/latticexyz/mud/commit/0660561545910b03f8358e5ed7698f74e64f955b)** (@latticexyz/common)
+
+- Added a `sendTransaction` helper to mirror viem's `sendTransaction`, but with our nonce manager
+- Added an internal mempool queue to `sendTransaction` and `writeContract` for better nonce handling
+- Defaults block tag to `pending` for transaction simulation and transaction count (when initializing the nonce manager)
+
+**[feat(cli): add `--alwaysPostDeploy` flag to deploys (#1765)](https://github.com/latticexyz/mud/commit/ccc21e91387cb09de9dc56729983776eb9bcdcc4)** (@latticexyz/cli)
+
+Added a `--alwaysRunPostDeploy` flag to deploys (`deploy`, `test`, `dev-contracts` commands) to always run `PostDeploy.s.sol` script after each deploy. By default, `PostDeploy.s.sol` is only run once after a new world is deployed.
+
+This is helpful if you want to continue a deploy that may not have finished (due to an error or otherwise) or to run deploys with an idempotent `PostDeploy.s.sol` script.
+
+**[feat(abi-ts): move logs to debug (#1736)](https://github.com/latticexyz/mud/commit/ca32917519eb9065829f11af105abbbb31d6efa2)** (@latticexyz/abi-ts)
+
+Moves log output behind a debug flag. You can enable logging with `DEBUG=abi-ts` environment variable.
+
+**[feat(cli): remove forge clean from deploy (#1759)](https://github.com/latticexyz/mud/commit/e667ee808b5362ff215ba3faea028b526660eccb)** (@latticexyz/cli)
+
+CLI `deploy`, `test`, `dev-contracts` no longer run `forge clean` before each deploy. We previously cleaned to ensure no outdated artifacts were checked into git (ABIs, typechain types, etc.). Now that all artifacts are gitignored, we can let forge use its cache again.
+
+**[feat(common): clarify resourceId (hex) from resource (object) (#1706)](https://github.com/latticexyz/mud/commit/d2f8e940048e56d9be204bf5b2cbcf8d29cc1dee)** (@latticexyz/common)
+
+Renames `resourceIdToHex` to `resourceToHex` and `hexToResourceId` to `hexToResource`, to better distinguish between a resource ID (hex value) and a resource reference (type, namespace, name).
+
+```diff
+- resourceIdToHex({ type: 'table', namespace: '', name: 'Position' });
++ resourceToHex({ type: 'table', namespace: '', name: 'Position' });
+```
+
+```diff
+- hexToResourceId('0x...');
++ hexToResource('0x...');
+```
+
+Previous methods still exist but are now deprecated to ease migration and reduce breaking changes. These will be removed in a future version.
+
+Also removes the previously deprecated and unused table ID utils (replaced by these resource ID utils).
+
+**[feat(cli): remove .mudtest file in favor of env var (#1722)](https://github.com/latticexyz/mud/commit/25086be5f34d7289f21395595ac8a6aeabfe9b7c)** (@latticexyz/cli, @latticexyz/common, @latticexyz/world)
+
+Replaced temporary `.mudtest` file in favor of `WORLD_ADDRESS` environment variable when running tests with `MudTest` contract
+
+**[feat(faucet,store-indexer): add k8s healthcheck endpoints (#1739)](https://github.com/latticexyz/mud/commit/1d0f7e22b7fb8f6295b149a6584933a3a657ec08)** (@latticexyz/faucet, @latticexyz/store-indexer)
+
+Added `/healthz` and `/readyz` healthcheck endpoints for Kubernetes
+
+**[feat(cli): add retries to deploy (#1766)](https://github.com/latticexyz/mud/commit/e1dc88ebe7f66e4ece13805643e932e038863b6e)** (@latticexyz/cli)
+
+Transactions sent via deploy will now be retried a few times before giving up. This hopefully helps with large deploys on some chains.
+
+### Patch changes
+
+**[fix(cli): don't bail dev-contracts during deploy failure (#1808)](https://github.com/latticexyz/mud/commit/3bfee32cf4d036a73b35f059e0159f1b7a7088e9)** (@latticexyz/cli)
+
+`dev-contracts` will no longer bail when there was an issue with deploying (e.g. typo in contracts) and instead wait for file changes before retrying.
+
+**[feat(store): parallelize table codegen (#1754)](https://github.com/latticexyz/mud/commit/f62c767e7ff3bda807c592d85227221a00dd9353)** (@latticexyz/store)
+
+Parallelized table codegen. Also put logs behind debug flag, which can be enabled using the `DEBUG=mud:*` environment variable.
+
+**[fix(cli): handle module already installed (#1769)](https://github.com/latticexyz/mud/commit/4e2a170f9185a03c2c504912e3d738f06b45137b)** (@latticexyz/cli)
+
+Deploys now continue if they detect a `Module_AlreadyInstalled` revert error.
+
+**[fix(cli): deploy systems/modules before registering/installing them (#1767)](https://github.com/latticexyz/mud/commit/61c6ab70555dc29e8e9428212ee710d7af681cc9)** (@latticexyz/cli)
+
+Changed deploy order so that system/module contracts are fully deployed before registering/installing them on the world.
+
+**[fix(cli): run worldgen with deploy (#1807)](https://github.com/latticexyz/mud/commit/69d55ce3265e10a1ae62ddca9e32e34f1cd52dea)** (@latticexyz/cli)
+
+Deploy commands (`deploy`, `dev-contracts`, `test`) now correctly run `worldgen` to generate system interfaces before deploying.
+
+**[feat(store): parallelize table codegen (#1754)](https://github.com/latticexyz/mud/commit/f62c767e7ff3bda807c592d85227221a00dd9353)** (@latticexyz/common)
+
+Moved some codegen to use `fs/promises` for better parallelism.
+
+**[fix(cli): support enums in deploy, only deploy modules/systems once (#1749)](https://github.com/latticexyz/mud/commit/4fe079309fae04ffd2e611311937906f65bf91e6)** (@latticexyz/cli)
+
+Fixed a few issues with deploys:
+
+- properly handle enums in MUD config
+- only deploy each unique module/system once
+- waits for transactions serially instead of in parallel, to avoid RPC errors
+
+**[feat(cli,create-mud): use forge cache (#1777)](https://github.com/latticexyz/mud/commit/d844cd441c40264ddc90d023e4354adea617febd)** (@latticexyz/cli, create-mud)
+
+Sped up builds by using more of forge's cache.
+
+Previously we'd build only what we needed because we would check in ABIs and other build artifacts into git, but that meant that we'd get a lot of forge cache misses. Now that we no longer need these files visible, we can take advantage of forge's caching and greatly speed up builds, especially incremental ones.
+
+**[feat(cli): declarative deployment (#1702)](https://github.com/latticexyz/mud/commit/29c3f5087017dbc9dc2c9160e10bfbac5806741f)** (@latticexyz/world)
+
+With [resource types in resource IDs](https://github.com/latticexyz/mud/pull/1544), the World config no longer requires table and system names to be unique.
+
+**[feat(common): clarify resourceId (hex) from resource (object) (#1706)](https://github.com/latticexyz/mud/commit/d2f8e940048e56d9be204bf5b2cbcf8d29cc1dee)** (@latticexyz/cli, @latticexyz/dev-tools, @latticexyz/store-sync)
+
+Moved to new resource ID utils.
+
+---
+
 ## Version 2.0.0-next.11
 
 ### Major changes

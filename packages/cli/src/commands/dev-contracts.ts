@@ -9,13 +9,15 @@ import { WorldConfig } from "@latticexyz/world";
 import { homedir } from "os";
 import { rmSync } from "fs";
 import { deployOptions, runDeploy } from "../runDeploy";
-import { BehaviorSubject, debounceTime, exhaustMap } from "rxjs";
+import { BehaviorSubject, debounceTime, exhaustMap, filter } from "rxjs";
 import { Address } from "viem";
+import { isDefined } from "@latticexyz/common/utils";
 
 const devOptions = {
   rpc: deployOptions.rpc,
   configPath: deployOptions.configPath,
   alwaysRunPostDeploy: deployOptions.alwaysRunPostDeploy,
+  worldAddress: deployOptions.worldAddress,
 };
 
 const commandModule: CommandModule<typeof devOptions, InferredOptionTypes<typeof devOptions>> = {
@@ -52,48 +54,57 @@ const commandModule: CommandModule<typeof devOptions, InferredOptionTypes<typeof
 
     // Watch for changes
     const lastChange$ = new BehaviorSubject<number>(Date.now());
-    chokidar.watch([configPath, srcDir, scriptDir]).on("all", async (_, updatePath) => {
+    chokidar.watch([configPath, srcDir, scriptDir], { ignoreInitial: true }).on("all", async (_, updatePath) => {
       if (updatePath.includes(configPath)) {
+        console.log(chalk.blue("Config changed, queuing deploy…"));
         lastChange$.next(Date.now());
       }
       if (updatePath.includes(srcDir) || updatePath.includes(scriptDir)) {
         // Ignore changes to codegen files to avoid an infinite loop
         if (!updatePath.includes(initialConfig.codegenDirectory)) {
+          console.log(chalk.blue("Contracts changed, queuing deploy…"));
           lastChange$.next(Date.now());
         }
       }
     });
 
-    let worldAddress: Address | undefined;
+    let worldAddress = opts.worldAddress as Address | undefined;
 
     const deploys$ = lastChange$.pipe(
       // debounce so that a large batch of file changes only triggers a deploy after it settles down, rather than the first change it sees (and then redeploying immediately after)
       debounceTime(200),
       exhaustMap(async (lastChange) => {
         if (worldAddress) {
-          console.log(chalk.blue("Change detected, rebuilding and running deploy..."));
+          console.log(chalk.blue("Rebuilding and upgrading world…"));
         }
-        // TODO: handle errors
-        const deploy = await runDeploy({
-          ...opts,
-          configPath,
-          rpc,
-          skipBuild: false,
-          printConfig: false,
-          profile: undefined,
-          saveDeployment: true,
-          worldAddress,
-          srcDir,
-        });
-        worldAddress = deploy.address;
-        // if there were changes while we were deploying, trigger it again
-        if (lastChange < lastChange$.value) {
-          lastChange$.next(lastChange$.value);
-        } else {
-          console.log(chalk.gray("Watching for file changes..."));
+
+        try {
+          const deploy = await runDeploy({
+            ...opts,
+            configPath,
+            rpc,
+            skipBuild: false,
+            printConfig: false,
+            profile: undefined,
+            saveDeployment: true,
+            worldAddress,
+            srcDir,
+          });
+          worldAddress = deploy.address;
+          // if there were changes while we were deploying, trigger it again
+          if (lastChange < lastChange$.value) {
+            lastChange$.next(lastChange$.value);
+          } else {
+            console.log(chalk.gray("\nWaiting for file changes…\n"));
+          }
+          return deploy;
+        } catch (error) {
+          console.error(chalk.bgRed(chalk.whiteBright("\n Error while attempting deploy \n")));
+          console.error(error);
+          console.log(chalk.gray("\nWaiting for file changes…\n"));
         }
-        return deploy;
-      })
+      }),
+      filter(isDefined)
     );
 
     deploys$.subscribe();

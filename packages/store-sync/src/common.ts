@@ -1,10 +1,20 @@
 import { Address, Block, Hex, Log, PublicClient } from "viem";
-import { StoreConfig, StoreEventsAbiItem, StoreEventsAbi, resolveUserTypes } from "@latticexyz/store";
-import storeConfig from "@latticexyz/store/mud.config";
+import { StoreConfig, StoreEventsAbiItem, StoreEventsAbi, resolveConfig } from "@latticexyz/store";
 import { Observable } from "rxjs";
-import { resourceToHex } from "@latticexyz/common";
 import { UnionPick } from "@latticexyz/common/type-utils";
 import { KeySchema, TableRecord, ValueSchema } from "@latticexyz/protocol-parser";
+import storeConfig from "@latticexyz/store/mud.config";
+import worldConfig from "@latticexyz/world/mud.config";
+import { flattenSchema } from "./flattenSchema";
+
+/** @internal Temporary workaround until we redo our config parsing and can pull this directly from the config (https://github.com/latticexyz/mud/issues/1668) */
+export const storeTables = resolveConfig(storeConfig).tables;
+/** @internal Temporary workaround until we redo our config parsing and can pull this directly from the config (https://github.com/latticexyz/mud/issues/1668) */
+export const worldTables = resolveConfig(worldConfig).tables;
+
+export const internalTableIds = [...Object.values(storeTables), ...Object.values(worldTables)].map(
+  (table) => table.tableId
+);
 
 export type ChainId = number;
 export type WorldId = `${ChainId}:${Address}`;
@@ -26,6 +36,24 @@ export type TableWithRecords = Table & { records: TableRecord[] };
 export type StoreEventsLog = Log<bigint, number, false, StoreEventsAbiItem, true, StoreEventsAbi>;
 export type BlockLogs = { blockNumber: StoreEventsLog["blockNumber"]; logs: StoreEventsLog[] };
 
+// only two keys for now, to reduce complexity of creating indexes on SQL tables
+// TODO: make tableId optional to enable filtering just on keys (any table)
+//       this is blocked on reworking data storage so we can more easily query data across tables
+export type SyncFilter = {
+  /**
+   * Filter by the `bytes32` table ID.
+   */
+  tableId: Hex;
+  /**
+   * Optionally filter by the `bytes32` value of the key in the first position (index zero of the record's key tuple).
+   */
+  key0?: Hex;
+  /**
+   * Optionally filter by the `bytes32` value of the key in the second position (index one of the record's key tuple).
+   */
+  key1?: Hex;
+};
+
 export type SyncOptions<TConfig extends StoreConfig = StoreConfig> = {
   /**
    * MUD config
@@ -42,8 +70,12 @@ export type SyncOptions<TConfig extends StoreConfig = StoreConfig> = {
    */
   address?: Address;
   /**
-   * Optional table IDs to filter indexer state and RPC state.
+   * Optional filters for indexer and RPC state. Useful to narrow down the data received by the client for large worlds.
    */
+  filters?: SyncFilter[];
+  /**
+   * @deprecated Use `filters` option instead.
+   * */
   tableIds?: Hex[];
   /**
    * Optional block number to start indexing from. Useful for resuming the indexer from a particular point in time or starting after a particular contract deployment.
@@ -79,15 +111,10 @@ export type StorageAdapterLog = Partial<StoreEventsLog> & UnionPick<StoreEventsL
 export type StorageAdapterBlock = { blockNumber: BlockLogs["blockNumber"]; logs: StorageAdapterLog[] };
 export type StorageAdapter = (block: StorageAdapterBlock) => Promise<void>;
 
-// TODO: adjust when we get namespace support (https://github.com/latticexyz/mud/issues/994) and when table has namespace key (https://github.com/latticexyz/mud/issues/1201)
-// TODO: adjust when schemas are automatically resolved
+export const schemasTableId = storeTables.Tables.tableId;
 export const schemasTable = {
-  ...storeConfig.tables.Tables,
-  valueSchema: resolveUserTypes(storeConfig.tables.Tables.valueSchema, storeConfig.userTypes),
+  ...storeTables.Tables,
+  // TODO: remove once we've got everything using the new Table shape
+  keySchema: flattenSchema(storeTables.Tables.keySchema),
+  valueSchema: flattenSchema(storeTables.Tables.valueSchema),
 };
-
-export const schemasTableId = resourceToHex({
-  type: schemasTable.offchainOnly ? "offchainTable" : "table",
-  namespace: storeConfig.namespace,
-  name: schemasTable.name,
-});

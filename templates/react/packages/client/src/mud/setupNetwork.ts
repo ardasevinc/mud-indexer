@@ -5,13 +5,10 @@
  */
 import { createPublicClient, fallback, webSocket, http, createWalletClient, Hex, parseEther, ClientConfig } from "viem";
 import { createFaucetService } from "@latticexyz/services/faucet";
-import { encodeEntity, syncToRecs } from "@latticexyz/store-sync/recs";
-
+import { syncToZustand } from "@latticexyz/store-sync/zustand";
 import { getNetworkConfig } from "./getNetworkConfig";
-import { world } from "./world";
 import IWorldAbi from "contracts/out/IWorld.sol/IWorld.abi.json";
 import { createBurnerAccount, getContract, transportObserver, ContractWrite } from "@latticexyz/common";
-
 import { Subject, share } from "rxjs";
 
 /*
@@ -19,7 +16,7 @@ import { Subject, share } from "rxjs";
  * our tables and other config options. We use this to generate
  * things like RECS components and get back strong types for them.
  *
- * See https://mud.dev/tutorials/walkthrough/minimal-onchain#mudconfigts
+ * See https://mud.dev/templates/typescript/contracts#mudconfigts
  * for the source of this information.
  */
 import mudConfig from "contracts/mud.config";
@@ -74,8 +71,7 @@ export async function setupNetwork() {
    * to the viem publicClient to make RPC calls to fetch MUD
    * events from the chain.
    */
-  const { components, latestBlock$, storedBlockLogs$, waitForTransaction } = await syncToRecs({
-    world,
+  const { tables, useStore, latestBlock$, storedBlockLogs$, waitForTransaction } = await syncToZustand({
     config: mudConfig,
     address: networkConfig.worldAddress as Hex,
     publicClient,
@@ -111,9 +107,8 @@ export async function setupNetwork() {
   }
 
   return {
-    world,
-    components,
-    playerEntity: encodeEntity({ address: "address" }, { address: burnerWalletClient.account.address }),
+    tables,
+    useStore,
     publicClient,
     walletClient: burnerWalletClient,
     latestBlock$,

@@ -1,12 +1,15 @@
 import { StoreConfig, storeEventsAbi } from "@latticexyz/store";
-import { Hex, TransactionReceiptNotFoundError } from "viem";
+import { Hex, TransactionReceiptNotFoundError, encodeAbiParameters, parseAbiParameters } from "viem";
 import {
   StorageAdapter,
   StorageAdapterBlock,
   StorageAdapterLog,
+  SyncFilter,
   SyncOptions,
   SyncResult,
   TableWithRecords,
+  internalTableIds,
+  storeTables,
 } from "./common";
 import { createBlockStream, blockRangeToLogs, groupLogsByBlockNumber } from "@latticexyz/block-logs-stream";
 import {
@@ -32,9 +35,11 @@ import { createIndexerClient } from "./trpc-indexer";
 import { SyncStep } from "./SyncStep";
 import { chunk, isDefined } from "@latticexyz/common/utils";
 import { encodeKey, encodeValueArgs } from "@latticexyz/protocol-parser";
-import { internalTableIds } from "./internalTableIds";
+import { tableToLog } from "./tableToLog";
 
 const debug = parentDebug.extend("createStoreSync");
+
+const defaultFilters: SyncFilter[] = internalTableIds.map((tableId) => ({ tableId }));
 
 type CreateStoreSyncOptions<TConfig extends StoreConfig = StoreConfig> = SyncOptions<TConfig> & {
   storageAdapter: StorageAdapter;
@@ -52,13 +57,17 @@ export async function createStoreSync<TConfig extends StoreConfig = StoreConfig>
   onProgress,
   publicClient,
   address,
+  filters: initialFilters = [],
   tableIds = [],
   startBlock: initialStartBlock = 0n,
   maxBlockRange,
   initialState,
   indexerUrl,
 }: CreateStoreSyncOptions<TConfig>): Promise<SyncResult> {
-  const includedTableIds = new Set(tableIds.length ? [...internalTableIds, ...tableIds] : []);
+  const filters: SyncFilter[] =
+    initialFilters.length || tableIds.length
+      ? [...initialFilters, ...tableIds.map((tableId) => ({ tableId })), ...defaultFilters]
+      : [];
   const initialState$ = defer(
     async (): Promise<
       | {
@@ -82,7 +91,7 @@ export async function createStoreSync<TConfig extends StoreConfig = StoreConfig>
 
       const indexer = createIndexerClient({ url: indexerUrl });
       const chainId = publicClient.chain?.id ?? (await publicClient.getChainId());
-      const result = await indexer.findAll.query({ chainId, address, tableIds: Array.from(includedTableIds) });
+      const result = await indexer.findAll.query({ chainId, address, filters });
 
       onProgress?.({
         step: SyncStep.SNAPSHOT,
@@ -133,19 +142,22 @@ export async function createStoreSync<TConfig extends StoreConfig = StoreConfig>
         message: "Hydrating from snapshot",
       });
 
-      const logs: StorageAdapterLog[] = tables.flatMap((table) =>
-        table.records.map(
-          (record): StorageAdapterLog => ({
-            eventName: "Store_SetRecord",
-            address: table.address,
-            args: {
-              tableId: table.tableId,
-              keyTuple: encodeKey(table.keySchema, record.key),
-              ...encodeValueArgs(table.valueSchema, record.value),
-            },
-          })
-        )
-      );
+      const logs: StorageAdapterLog[] = [
+        ...tables.map(tableToLog),
+        ...tables.flatMap((table) =>
+          table.records.map(
+            (record): StorageAdapterLog => ({
+              eventName: "Store_SetRecord",
+              address: table.address,
+              args: {
+                tableId: table.tableId,
+                keyTuple: encodeKey(table.keySchema, record.key),
+                ...encodeValueArgs(table.valueSchema, record.value),
+              },
+            })
+          )
+        ),
+      ];
 
       // Split snapshot operations into chunks so we can update the progress callback (and ultimately render visual progress for the user).
       // This isn't ideal if we want to e.g. batch load these into a DB in a single DB tx, but we'll take it.
@@ -198,7 +210,20 @@ export async function createStoreSync<TConfig extends StoreConfig = StoreConfig>
       publicClient,
       address,
       events: storeEventsAbi,
+      // TODO: pass filters in here so we can filter at RPC level
       maxBlockRange,
+    }),
+    map(({ toBlock, logs }) => {
+      if (!filters.length) return { toBlock, logs };
+      const filteredLogs = logs.filter((log) =>
+        filters.some(
+          (filter) =>
+            filter.tableId === log.args.tableId &&
+            (filter.key0 == null || filter.key0 === log.args.keyTuple[0]) &&
+            (filter.key1 == null || filter.key1 === log.args.keyTuple[1])
+        )
+      );
+      return { toBlock, logs: filteredLogs };
     }),
     mergeMap(({ toBlock, logs }) => from(groupLogsByBlockNumber(logs, toBlock))),
     share()

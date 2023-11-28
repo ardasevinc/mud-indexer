@@ -1,4 +1,4 @@
-import { Account, Address, Chain, Client, Transport } from "viem";
+import { Account, Address, Chain, Client, Transport, getAddress } from "viem";
 import { ensureDeployer } from "./ensureDeployer";
 import { deployWorld } from "./deployWorld";
 import { ensureTables } from "./ensureTables";
@@ -12,8 +12,9 @@ import { Table } from "./configToTables";
 import { assertNamespaceOwner } from "./assertNamespaceOwner";
 import { debug } from "./debug";
 import { resourceLabel } from "./resourceLabel";
-import { ensureContract } from "./ensureContract";
 import { uniqueBy } from "@latticexyz/common/utils";
+import { ensureContractsDeployed } from "./ensureContractsDeployed";
+import { coreModuleBytecode, worldFactoryBytecode, worldFactoryContracts } from "./ensureWorldFactory";
 
 type DeployOptions<configInput extends ConfigInput> = {
   client: Client<Transport, Chain | undefined, Account>;
@@ -32,7 +33,28 @@ export async function deploy<configInput extends ConfigInput>({
   config,
   worldAddress: existingWorldAddress,
 }: DeployOptions<configInput>): Promise<WorldDeploy> {
+  const tables = Object.values(config.tables) as Table[];
+  const systems = Object.values(config.systems);
+
   await ensureDeployer(client);
+
+  // deploy all dependent contracts, because system registration, module install, etc. all expect these contracts to be callable.
+  await ensureContractsDeployed({
+    client,
+    contracts: [
+      ...worldFactoryContracts,
+      ...uniqueBy(systems, (system) => getAddress(system.address)).map((system) => ({
+        bytecode: system.bytecode,
+        deployedBytecodeSize: system.deployedBytecodeSize,
+        label: `${resourceLabel(system)} system`,
+      })),
+      ...uniqueBy(config.modules, (mod) => getAddress(mod.address)).map((mod) => ({
+        bytecode: mod.bytecode,
+        deployedBytecodeSize: mod.deployedBytecodeSize,
+        label: `${mod.name} module`,
+      })),
+    ],
+  });
 
   const worldDeploy = existingWorldAddress
     ? await getWorldDeploy(client, existingWorldAddress)
@@ -45,35 +67,11 @@ export async function deploy<configInput extends ConfigInput>({
     throw new Error(`Unsupported World version: ${worldDeploy.worldVersion}`);
   }
 
-  const tables = Object.values(config.tables) as Table[];
-  const systems = Object.values(config.systems);
-
   await assertNamespaceOwner({
     client,
     worldDeploy,
     resourceIds: [...tables.map((table) => table.tableId), ...systems.map((system) => system.systemId)],
   });
-
-  // deploy all dependent contracts, because system registration, module install, etc. all expect these contracts to be callable.
-  const contractTxs = (
-    await Promise.all([
-      ...uniqueBy(systems, (system) => system.address).map((system) =>
-        ensureContract({ client, bytecode: system.bytecode, label: `${resourceLabel(system)} system` })
-      ),
-      ...uniqueBy(config.modules, (mod) => mod.address).map((mod) =>
-        ensureContract({ client, bytecode: mod.bytecode, label: `${mod.name} module` })
-      ),
-    ])
-  ).flat();
-
-  if (contractTxs.length) {
-    debug("waiting for contracts");
-    // wait for each tx separately/serially, because parallelizing results in RPC errors
-    for (const tx of contractTxs) {
-      await waitForTransactionReceipt(client, { hash: tx });
-      // TODO: throw if there was a revert?
-    }
-  }
 
   const tableTxs = await ensureTables({
     client,
